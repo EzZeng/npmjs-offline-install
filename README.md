@@ -4,8 +4,9 @@ Windows 11 batch script for downloading npm packages and their runtime
 dependencies into a local offline repository when direct `npm install` access to
 the public registry is blocked by an internal proxy.
 
-The downloader uses `curl.exe` for registry metadata and package tarball
-downloads. It does not call `npm` while collecting packages.
+The downloader uses PowerShell HTTP requests with browser-like headers for
+registry metadata and package tarball downloads. It does not call `npm` while
+collecting packages.
 
 ## Usage
 
