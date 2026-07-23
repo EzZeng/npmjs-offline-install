@@ -23,20 +23,23 @@ $ErrorActionPreference = 'Stop'
 $packageSpec = $env:NPM_OFFLINE_PACKAGE
 $outputDir = [IO.Path]::GetFullPath($env:NPM_OFFLINE_OUTPUT)
 $registry = $env:NPM_OFFLINE_REGISTRY.TrimEnd('/')
-$userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) npmjs-offline-install'
+$userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
 
 function Fail($message) {
   Write-Error $message
   exit 1
 }
 
-function Test-Command($name) {
-  return $null -ne (Get-Command $name -ErrorAction SilentlyContinue)
-}
+Add-Type -AssemblyName System.Net.Http
 
-if (-not (Test-Command 'curl.exe')) {
-  Fail 'curl.exe was not found. Windows 11 includes curl by default; verify it is available in PATH.'
-}
+$httpHandler = [System.Net.Http.HttpClientHandler]::new()
+$httpHandler.AllowAutoRedirect = $true
+$httpClient = [System.Net.Http.HttpClient]::new($httpHandler)
+$httpClient.Timeout = [TimeSpan]::FromMinutes(15)
+$httpClient.DefaultRequestHeaders.UserAgent.ParseAdd($userAgent)
+$httpClient.DefaultRequestHeaders.Accept.ParseAdd('text/html,application/xhtml+xml,application/xml;q=0.9,application/json;q=0.8,*/*;q=0.7')
+$httpClient.DefaultRequestHeaders.AcceptLanguage.ParseAdd('en-US,en;q=0.9')
+$httpClient.DefaultRequestHeaders.Add('Upgrade-Insecure-Requests', '1')
 
 function Split-PackageSpec($spec) {
   $name = $spec
@@ -59,15 +62,48 @@ function Get-EscapedPackageName($name) {
   return [uri]::EscapeDataString($name)
 }
 
-function Invoke-CurlDownload($url, $target) {
+function Invoke-BrowserDownload($url, $target) {
   $parent = Split-Path -Parent $target
   if (-not (Test-Path $parent)) {
     New-Item -ItemType Directory -Force -Path $parent | Out-Null
   }
 
-  & curl.exe -fL --retry 3 --retry-delay 2 -A $userAgent -H 'Accept: application/json' -o $target $url
-  if ($LASTEXITCODE -ne 0) {
-    Fail "curl failed for $url"
+  $tempTarget = "$target.download"
+  for ($attempt = 1; $attempt -le 3; $attempt++) {
+    try {
+      if (Test-Path $tempTarget) {
+        Remove-Item -Force -LiteralPath $tempTarget
+      }
+
+      $response = $httpClient.GetAsync($url, [System.Net.Http.HttpCompletionOption]::ResponseHeadersRead).GetAwaiter().GetResult()
+      try {
+        if (-not $response.IsSuccessStatusCode) {
+          throw "HTTP $([int]$response.StatusCode) $($response.ReasonPhrase)"
+        }
+
+        $inputStream = $response.Content.ReadAsStreamAsync().GetAwaiter().GetResult()
+        try {
+          $outputStream = [IO.File]::Create($tempTarget)
+          try {
+            $inputStream.CopyTo($outputStream)
+          } finally {
+            $outputStream.Dispose()
+          }
+        } finally {
+          $inputStream.Dispose()
+        }
+
+        Move-Item -Force -LiteralPath $tempTarget -Destination $target
+        return
+      } finally {
+        $response.Dispose()
+      }
+    } catch {
+      if ($attempt -eq 3) {
+        Fail "HTTP download failed for $url`: $($_.Exception.Message)"
+      }
+      Start-Sleep -Seconds (2 * $attempt)
+    }
   }
 }
 
@@ -76,7 +112,7 @@ function Get-Metadata($name) {
   if (-not (Test-Path $metadataPath)) {
     $url = "$registry/$(Get-EscapedPackageName $name)"
     Write-Host "metadata  $name"
-    Invoke-CurlDownload $url $metadataPath
+    Invoke-BrowserDownload $url $metadataPath
   }
   return Get-Content -Raw -LiteralPath $metadataPath | ConvertFrom-Json
 }
@@ -246,7 +282,7 @@ while ($queue.Count -gt 0) {
   $fileName = "{0}-{1}.tgz" -f (($request.Name -replace '^@', '') -replace '/', '-'), $version
   $tarballPath = Join-Path $tarballDir $fileName
   Write-Host "tarball   $versionKey"
-  Invoke-CurlDownload $tarballUrl $tarballPath
+  Invoke-BrowserDownload $tarballUrl $tarballPath
 
   $downloadedVersions[$versionKey] = $true
   $manifest.Add([pscustomobject]@{
