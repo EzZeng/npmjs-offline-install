@@ -246,6 +246,17 @@ function Add-DependencyMap($queue, $dependencyMap) {
   }
 }
 
+function Get-TarballRelativePath($name, $version) {
+  if ($name -match '^@([^/]+)/([^/]+)$') {
+    return "tarballs/@$($Matches[1])/$($Matches[2])-$version.tgz"
+  }
+  if ($name -match '^[^/@][^/]*$') {
+    return "tarballs/$name-$version.tgz"
+  }
+
+  Fail "Invalid package name for output path: $name"
+}
+
 New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
 $tarballDir = Join-Path $outputDir 'tarballs'
 $metadataDir = Join-Path $outputDir 'metadata'
@@ -279,8 +290,8 @@ while ($queue.Count -gt 0) {
     Fail "No tarball URL found for $versionKey"
   }
 
-  $fileName = "{0}-{1}.tgz" -f (($request.Name -replace '^@', '') -replace '/', '-'), $version
-  $tarballPath = Join-Path $tarballDir $fileName
+  $tarballFile = Get-TarballRelativePath $request.Name $version
+  $tarballPath = Join-Path $outputDir ($tarballFile -replace '/', [IO.Path]::DirectorySeparatorChar)
   Write-Host "tarball   $versionKey"
   Invoke-BrowserDownload $tarballUrl $tarballPath
 
@@ -289,7 +300,7 @@ while ($queue.Count -gt 0) {
     name = $request.Name
     version = $version
     request = $request.Range
-    file = "tarballs/$fileName"
+    file = $tarballFile
     tarball = $tarballUrl
   }) | Out-Null
 
@@ -306,7 +317,7 @@ $rootTarball = ($manifest | Select-Object -First 1).file -replace '/', '\'
   '@echo off'
   'setlocal'
   'cd /d "%~dp0"'
-  'for %%F in ("tarballs\*.tgz") do npm cache add "%%~fF" --no-audit'
+  'for /R "tarballs" %%F in (*.tgz) do npm cache add "%%~fF" --no-audit'
   'npm install --offline --no-audit --prefer-offline "' + $rootTarball + '"'
 ) | Set-Content -Encoding ASCII -LiteralPath $installScript
 

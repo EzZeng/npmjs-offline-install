@@ -28,7 +28,10 @@ The output directory is a simple repo that can be copied to an offline machine:
 ```text
 offline-npm-repo/
   metadata/              registry metadata JSON used for resolution
-  tarballs/              downloaded .tgz packages
+  tarballs/              downloaded .tgz packages named from package.json dependencies
+    express-4.18.3.tgz
+    @types/
+      node-20.19.9.tgz
   package-list.json      downloaded package manifest
   install-offline.bat    helper that seeds npm cache and installs the root package
 ```
