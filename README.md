@@ -53,5 +53,24 @@ offline-npm-repo\install-offline.bat
 ## Included Electron package
 
 This repository includes an `npm install electron` result for `electron@43.2.0`
-as `archives/electron-43.2.0-npm-install.tar.gz`. Extract the archive to restore
-the generated `package.json`, `package-lock.json`, and `node_modules` contents.
+with the Windows x64 Electron runtime already downloaded. The completed archive
+is split into Git-friendly parts under `archives/`:
+
+```text
+archives/electron-43.2.0-npm-install.tar.gz.part-aa
+archives/electron-43.2.0-npm-install.tar.gz.part-ab
+archives/electron-43.2.0-npm-install.tar.gz.sha256
+```
+
+On Windows, restore the archive and extract it with:
+
+```bat
+cd archives
+copy /b electron-43.2.0-npm-install.tar.gz.part-aa+electron-43.2.0-npm-install.tar.gz.part-ab electron-43.2.0-npm-install.tar.gz
+certutil -hashfile electron-43.2.0-npm-install.tar.gz SHA256
+tar -xzf electron-43.2.0-npm-install.tar.gz -C ..
+```
+
+Compare the `certutil` hash with
+`archives/electron-43.2.0-npm-install.tar.gz.sha256`, then use the restored
+`package.json`, `package-lock.json`, and `node_modules` contents offline.
