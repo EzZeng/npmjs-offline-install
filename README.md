@@ -49,3 +49,9 @@ offline-npm-repo\install-offline.bat
 - Common npm ranges such as exact versions, dist-tags, `^`, `~`, comparison
   ranges, and wildcards are supported.
 - If your environment requires a registry mirror, pass it as the third argument.
+
+## Included Electron package
+
+This repository includes an `npm install electron` result for `electron@43.2.0`
+as `archives/electron-43.2.0-npm-install.tar.gz`. Extract the archive to restore
+the generated `package.json`, `package-lock.json`, and `node_modules` contents.
